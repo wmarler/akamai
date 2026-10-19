@@ -1,0 +1,91 @@
+---
+# Butane config for one ephemeral guest. Rendered by lib/vm.sh (every
+# placeholder value is validated before substitution), transpiled with Butane,
+# and handed to the guest over QEMU fw_cfg so Ignition applies it on first boot.
+#
+# The guest is intentionally minimal: a static address, a single static page,
+# an nginx container to serve it, and automatic updates switched off so the
+# guest cannot reboot itself during its short life.
+variant: flatcar
+version: 1.1.0
+
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+@@SSH_KEYS_YAML@@
+
+storage:
+  files:
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: "@@NAME@@"
+
+    # Static addressing. Matching on the MAC (not the interface name) makes the
+    # unit immune to predictable-interface-name changes between Flatcar
+    # releases. The "10-" prefix sorts ahead of Flatcar's DHCP default.
+    - path: /etc/systemd/network/10-static.network
+      mode: 0644
+      contents:
+        inline: |
+          [Match]
+          MACAddress=@@MAC@@
+
+          [Network]
+          Address=@@IP@@/@@PREFIX_LEN@@
+          Gateway=@@GATEWAY@@
+          DNS=@@DNS@@
+          LinkLocalAddressing=no
+          IPv6AcceptRA=no
+
+    # The page the guest serves. Built from guest/index.html.template with the
+    # user's message already HTML-escaped; shipped as a file ("local:") so that
+    # no user-controlled text is ever spliced into this YAML.
+    - path: /var/www/index.html
+      mode: 0644
+      contents:
+        local: index.html
+
+    # Make the guest's purpose obvious to anyone who logs in.
+    - path: /etc/motd.d/akamai.conf
+      mode: 0644
+      contents:
+        inline: |
+          Ephemeral demo guest @@FQDN@@ (@@IP@@), provisioned by the akamai portal.
+          Serving /var/www via web.service; it will be reaped automatically.
+
+systemd:
+  units:
+    # No OS auto-updates / reboots during the instance's lifetime.
+    - name: update-engine.service
+      mask: true
+    - name: locksmithd.service
+      mask: true
+
+    - name: web.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Static page for @@FQDN@@ (nginx in Docker)
+        After=docker.service network-online.target
+        Requires=docker.service
+        Wants=network-online.target
+
+        [Service]
+        # Pull explicitly so a slow registry shows up as a clear log line
+        # rather than a silent delay inside "docker run".
+        ExecStartPre=-/usr/bin/docker rm -f web
+        ExecStartPre=/usr/bin/docker pull docker.io/library/nginx:alpine
+        ExecStart=/usr/bin/docker run --rm --name web \
+          --publish 80:80 \
+          --volume /var/www:/usr/share/nginx/html:ro \
+          --read-only --tmpfs /var/cache/nginx --tmpfs /var/run --tmpfs /tmp \
+          --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add NET_BIND_SERVICE \
+          docker.io/library/nginx:alpine
+        ExecStop=/usr/bin/docker stop web
+        Restart=always
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target

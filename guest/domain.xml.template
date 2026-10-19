@@ -1,0 +1,88 @@
+<!--
+  libvirt domain for one ephemeral Flatcar guest. Rendered by lib/vm.sh and
+  started with "virsh create" (transient: nothing persists in libvirt after
+  the domain is destroyed).
+
+  Ignition is delivered through QEMU's fw_cfg interface under the key
+  Flatcar's Ignition looks for on the "qemu" platform. This is exactly what
+  flatcar_production_qemu.sh does with its "fw_cfg name=...,file=..." option,
+  expressed here as libvirt's native sysinfo type='fwcfg' element so libvirt
+  can label the file for the hypervisor's security driver (AppArmor on Ubuntu).
+-->
+<domain type='kvm' xmlns:akamai='urn:akamai-portal:instance:1.0'>
+  <name>@@VM_NAME@@</name>
+  <title>@@FQDN@@</title>
+  <description>Ephemeral demo guest for @@FQDN@@, provisioned @@CREATED_AT@@, expires @@EXPIRES_AT@@</description>
+  <metadata>
+    <akamai:instance>
+      <akamai:name>@@NAME@@</akamai:name>
+      <akamai:fqdn>@@FQDN@@</akamai:fqdn>
+      <akamai:ip>@@IP@@</akamai:ip>
+      <akamai:created>@@CREATED_AT@@</akamai:created>
+      <akamai:expires>@@EXPIRES_AT@@</akamai:expires>
+    </akamai:instance>
+  </metadata>
+
+  <memory unit='MiB'>@@MEMORY_MIB@@</memory>
+  <vcpu placement='static'>@@VCPUS@@</vcpu>
+
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+  </os>
+  <sysinfo type='fwcfg'>
+    <entry name='opt/org.flatcar-linux/config' file='@@IGNITION_PATH@@'/>
+  </sysinfo>
+
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough' check='none' migratable='on'/>
+  <clock offset='utc'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+  </clock>
+
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+
+    <!-- Copy-on-write overlay; the base image is shared read-only by every guest. -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' discard='unmap'/>
+      <source file='@@DISK_PATH@@'/>
+      <backingStore type='file'>
+        <format type='qcow2'/>
+        <source file='@@BASE_IMAGE@@'/>
+      </backingStore>
+      <target dev='vda' bus='virtio'/>
+      <boot order='1'/>
+    </disk>
+
+    <interface type='bridge'>
+      <mac address='@@MAC@@'/>
+      <source bridge='@@BRIDGE@@'/>
+      <model type='virtio'/>
+    </interface>
+
+    <!-- Serial console captured to a file for post-mortem debugging. -->
+    <serial type='file'>
+      <source path='@@CONSOLE_LOG@@' append='off'/>
+      <target port='0'/>
+    </serial>
+    <console type='file'>
+      <source path='@@CONSOLE_LOG@@' append='off'/>
+      <target type='serial' port='0'/>
+    </console>
+
+    <rng model='virtio'>
+      <backend model='random'>/dev/urandom</backend>
+    </rng>
+    <memballoon model='virtio'/>
+    <controller type='usb' model='none'/>
+  </devices>
+</domain>

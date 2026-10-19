@@ -1,0 +1,13 @@
+# Install as /etc/systemd/system/akamai-reaper.timer
+# Rendered from configs/akamai-reaper.timer.template by configs/generate_configs.sh.
+
+[Unit]
+Description=Run the Akamai demo guest reaper every 5 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

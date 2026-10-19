@@ -1,0 +1,11 @@
+# Install as /etc/systemd/system/akamai-reaper.service
+# Rendered from configs/akamai-reaper.service.template by configs/generate_configs.sh.
+
+[Unit]
+Description=Tear down expired Akamai demo guests
+Documentation=file://@@AKAMAI_DIR@@/README.md
+After=libvirtd.service docker.service
+
+[Service]
+Type=oneshot
+ExecStart=@@AKAMAI_DIR@@/bin/reap.sh

@@ -1,0 +1,15 @@
+# Least-privilege bridge between the unprivileged portal and the root-only
+# provisioning scripts.
+#
+# Install as /etc/sudoers.d/akamai-portal (mode 0440) after checking it with
+#   visudo -cf configs/actual/sudoers
+#
+# The service account may run exactly two executables, with any arguments,
+# non-interactively. Both scripts re-validate every argument themselves, so
+# nothing the web layer passes through is trusted. The scripts and the lib/
+# directory they source must not be writable by @@SERVICE_USER@@.
+#
+# Rendered from configs/sudoers.template by configs/generate_configs.sh.
+
+Defaults:@@SERVICE_USER@@ !requiretty, env_reset, !lecture
+@@SERVICE_USER@@ ALL=(root) NOPASSWD: @@AKAMAI_DIR@@/bin/provision.sh, @@AKAMAI_DIR@@/bin/deprovision.sh

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provision a guest &middot; {{portal_host}}</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<header>
+  <h1>Provision a guest</h1>
+  <p class="lede">
+    Pick a name and a message. In about a minute this host will create
+    <code>{{instance_prefix}}&lt;name&gt;.{{base_domain}}</code>, boot a fresh
+    <a href="https://www.flatcar.org/" rel="noopener">Flatcar Container Linux</a> VM under KVM/QEMU,
+    and wire the hypervisor's nginx to proxy to it. The new site will show your message.
+  </p>
+</header>
+
+<main>
+  <section class="card">
+    <form id="provision-form" method="post" action="/api/provision" autocomplete="off">
+      <label for="name">Hostname</label>
+      <div class="hostname">
+        <span class="prefix">{{instance_prefix}}</span>
+        <input id="name" name="name" type="text" inputmode="latin" required
+               pattern="[a-z0-9]{1,32}" maxlength="32" spellcheck="false"
+               placeholder="bob" aria-describedby="name-help">
+        <span class="suffix">.{{base_domain}}</span>
+      </div>
+      <p id="name-help" class="help">Lower-case letters and digits only, up to 32 characters.</p>
+
+      <label for="message">Message to display</label>
+      <input id="message" name="message" type="text" required maxlength="{{message_max}}"
+             placeholder="Hello from a VM that did not exist a minute ago."
+             aria-describedby="message-help">
+      <p id="message-help" class="help">Up to {{message_max}} characters. Shown as text, never as markup.</p>
+
+      <button type="submit" id="submit">Provision</button>
+      <p id="form-error" class="error" role="alert" hidden></p>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Live instances <span class="muted" id="capacity"></span></h2>
+    <p class="help">Each instance is torn down automatically {{ttl}} hour(s) after it was created.</p>
+    <table id="instances">
+      <thead><tr><th>Hostname</th><th>Created</th><th>Expires</th></tr></thead>
+      <tbody><tr><td colspan="3" class="muted">Loading&hellip;</td></tr></tbody>
+    </table>
+    <noscript><p class="help">Enable JavaScript to see live instances, or fetch <code>/api/instances</code>.</p></noscript>
+  </section>
+
+  <section class="card">
+    <h2>What happens when you press the button</h2>
+    <ol class="steps">
+      <li>The request is validated twice: here, and again inside the root-only provisioning script.</li>
+      <li>A static address and MAC are allocated from a small pool on the hypervisor's bridge.</li>
+      <li>A <code>CNAME</code> for the new hostname is created through the Cloudflare API.</li>
+      <li>A Butane config carrying your message is transpiled to Ignition.</li>
+      <li>A copy-on-write qcow2 overlay is laid on the shared Flatcar image and a transient libvirt domain is started; Ignition arrives over QEMU's <code>fw_cfg</code>.</li>
+      <li>The guest boots, applies its static network config, and starts nginx (in Docker) serving the page.</li>
+      <li>Once the guest answers HTTP, a server block is added to the hypervisor's nginx, tested, and reloaded.</li>
+    </ol>
+    <p class="help">Every step is logged to the job page, and any failure rolls back what was already done.</p>
+  </section>
+</main>
+
+<footer>
+  <p class="muted">Portal: Python standard library &middot; Provisioning: bash, libvirt/QEMU, Butane/Ignition, Cloudflare API &middot; Edge: nginx + ModSecurity CRS
+    <span id="source"> &middot; <a id="source-link" href="{{repo_url}}" rel="noopener">Source code</a></span></p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

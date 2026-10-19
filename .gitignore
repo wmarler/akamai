@@ -1,0 +1,18 @@
+# The secrets file and the configs generated from it.
+configs/actual/
+
+# Runtime state: instance records, job logs, VM disks, Ignition files, locks.
+state/
+
+# Flatcar base images (large, downloaded by bin/fetch-image.sh).
+images/
+
+# Butane staging output.
+staging/
+
+# Editor / OS noise.
+*.swp
+*~
+.DS_Store
+__pycache__/
+*.pyc

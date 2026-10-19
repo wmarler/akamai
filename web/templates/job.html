@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{kind}} {{fqdn}} &middot; job {{job_id}}</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<noscript><meta http-equiv="refresh" content="{{refresh}}"></noscript>
+</head>
+<body data-job-id="{{job_id}}" data-destroy-token="{{destroy_token}}">
+<header>
+  <h1><span class="kind">{{kind}}</span> <code>{{fqdn}}</code></h1>
+  <p class="lede"><a href="/">&larr; back to the portal</a></p>
+</header>
+
+<main>
+  <section class="card">
+    <div class="status-row">
+      <span>Status: <strong id="status" class="status status-{{status}}">{{status}}</strong></span>
+      <span id="position" class="muted"></span>
+      <span id="elapsed" class="muted"></span>
+    </div>
+    <p id="result" class="result" hidden>
+      Your site is live: <a id="result-link" href="#" rel="noopener" target="_blank"></a>
+      <span class="muted">(expires <span id="result-expires"></span>)</span>
+    </p>
+    <form id="destroy-form" method="post" action="/api/jobs/{{job_id}}/destroy" hidden>
+      <input type="hidden" name="token" value="{{destroy_token}}">
+      <button type="submit" class="secondary">Tear it down now</button>
+      <span class="help">Otherwise it will be reaped automatically when it expires.</span>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Job log</h2>
+    <pre id="log" class="log">{{log}}</pre>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

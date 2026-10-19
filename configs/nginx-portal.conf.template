@@ -1,0 +1,79 @@
+# Reverse proxy for the provisioning portal, plus the include that picks up the
+# per-instance server blocks the provisioner writes.
+#
+# Install as:  /etc/nginx/sites-available/@@PORTAL_HOST@@.conf
+# Enable with: ln -s ../sites-available/@@PORTAL_HOST@@.conf /etc/nginx/sites-enabled/
+#
+# Guest hostnames are @@INSTANCE_PREFIX@@<name>.@@BASE_DOMAIN@@. Exact
+# server_name matches in the include below beat the regex fallback further down.
+
+# Per-instance server blocks (one file per live guest). The directory may be
+# empty; a glob include with no matches is not an error.
+include @@NGINX_INSTANCE_DIR@@/*.conf;
+
+upstream akamai_portal {
+  server 127.0.0.1:@@WEB_LISTEN_PORT@@;
+  keepalive 8;
+}
+
+server {
+  listen 80;
+  server_name @@PORTAL_HOST@@;
+  return 301 https://@@PORTAL_HOST@@$request_uri;
+}
+
+server {
+  server_name @@PORTAL_HOST@@;
+
+  # I have many virtual hosts under my domain, so I have my SSL configs in an include
+  include @@NGINX_SSL_SNIPPET@@;
+
+  access_log /var/log/nginx/akamai-portal-access.log main;
+  error_log  /var/log/nginx/akamai-portal-error.log;
+
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options nosniff always;
+  add_header X-Frame-Options DENY always;
+
+  # The only POST bodies are a 32-char name and a 200-char message.
+  client_max_body_size 16k;
+
+  location / {
+    proxy_pass http://akamai_portal;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    # The portal rate-limits on X-Real-IP; with the Cloudflare real_ip
+    # configuration in conf.d this is the true client address.
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 30s;
+    proxy_cache off;
+  }
+}
+
+# Catch-all for @@INSTANCE_PREFIX@@*.@@BASE_DOMAIN@@ with no live instance.
+# Exact names in akamai.d/*.conf win over this regex, so a live guest is
+# never served from here. After teardown (or a typo) the visitor gets a
+# short explanation instead of a bare 444/502.
+server {
+  listen 80;
+  server_name ~^@@INSTANCE_PREFIX_REGEX@@[a-z0-9]{1,32}\.@@BASE_DOMAIN_REGEX@@$;
+  return 301 https://$host$request_uri;
+}
+
+server {
+  server_name ~^@@INSTANCE_PREFIX_REGEX@@[a-z0-9]{1,32}\.@@BASE_DOMAIN_REGEX@@$;
+
+  include @@NGINX_SSL_SNIPPET@@;
+
+  access_log /var/log/nginx/akamai-missing-access.log main;
+  error_log  /var/log/nginx/akamai-missing-error.log;
+
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options nosniff always;
+
+  default_type text/html;
+  return 404 '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>No instance</title><style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem;line-height:1.5}code{font-family:ui-monospace,monospace}</style></head><body><h1>No live instance here</h1><p><code>$host</code> is not currently provisioned. Guests are ephemeral (typically a couple of hours) and are torn down automatically when they expire.</p><p><a href="https://@@PORTAL_HOST@@/">Provision a new one</a></p></body></html>';
+}
