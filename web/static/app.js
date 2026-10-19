@@ -1,4 +1,4 @@
-/* Progressive enhancement for the portal. Both pages work without this
+/* Progressive enhancement for web/server.py. Both pages work without this
  * file (plain form posts + meta refresh); with it, submissions happen over
  * fetch(), the instance table fills itself in, and the job page streams. */
 (function () {
@@ -46,9 +46,8 @@
         });
         const data = await res.json().catch(() => ({}));
         if (res.status === 403 && !data.error) {
-          // Non-JSON 403: the WAF (ModSecurity CRS) in front of the portal
-          // rejected the request before it reached us.
-          throw new Error("The web application firewall in front of this portal blocked that input. Try different wording.");
+          // Non-JSON 403: ModSecurity CRS in front of web/server.py blocked the request.
+          throw new Error("The web application firewall in front of web/server.py blocked that input. Try different wording.");
         }
         if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
         window.location.href = data.job_url;

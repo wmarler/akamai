@@ -11,7 +11,7 @@
 #
 # CHANNEL defaults to "stable".
 
-source /home/osmc/akamai/lib/common.sh
+source "$(dirname "$0")/../lib/common.sh"
 
 LOG_TAG="fetch-image"
 CHANNEL="${1:-stable}"

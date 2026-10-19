@@ -1,8 +1,8 @@
-# Least-privilege bridge between the unprivileged portal and the root-only
+# Least-privilege bridge between the akamai-web user (web/server.py) and root-only
 # provisioning scripts.
 #
 # Install as /etc/sudoers.d/akamai-portal (mode 0440) after checking it with
-#   visudo -cf configs/actual/sudoers
+#   visudo -cf configs/actual/sudoers   (after generate_configs.sh)
 #
 # The service account may run exactly two executables, with any arguments,
 # non-interactively. Both scripts re-validate every argument themselves, so

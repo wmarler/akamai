@@ -2,7 +2,7 @@
 # Rendered from configs/akamai-web.service.template by configs/generate_configs.sh.
 
 [Unit]
-Description=Akamai demo portal (self-service Flatcar guest provisioning)
+Description=web/server.py (self-service Flatcar guest provisioning)
 Documentation=file://@@AKAMAI_DIR@@/README.md
 After=network-online.target libvirtd.service docker.service
 Wants=network-online.target

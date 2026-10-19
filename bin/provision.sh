@@ -14,15 +14,15 @@
 #
 # Steps are ordered so that the cheapest-to-undo work happens first, and any
 # failure after step 2 rolls back everything done so far (DNS record, domain,
-# disk, registry entry). Output is the job log the user sees in the portal.
+# disk, registry entry). Output is the job log streamed by web/server.py.
 #
 # Runs as root via a sudoers rule restricted to this exact path; the only
 # caller is the web service, but it is equally usable from a shell.
 
-source /home/osmc/akamai/lib/common.sh
-source /home/osmc/akamai/lib/cloudflare.sh
-source /home/osmc/akamai/lib/vm.sh
-source /home/osmc/akamai/lib/nginx.sh
+source "$(dirname "$0")/../lib/common.sh"
+source "$(dirname "$0")/../lib/cloudflare.sh"
+source "$(dirname "$0")/../lib/vm.sh"
+source "$(dirname "$0")/../lib/nginx.sh"
 
 LOG_TAG="provision"
 

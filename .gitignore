@@ -1,4 +1,5 @@
-# The secrets file and the configs generated from it.
+# Secrets and generated host configs (templates stay in configs/).
+/secrets
 configs/actual/
 
 # Runtime state: instance records, job logs, VM disks, Ignition files, locks.

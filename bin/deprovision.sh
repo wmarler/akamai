@@ -7,10 +7,10 @@
 # is independent and tolerant of the thing already being gone, so this is
 # safe to re-run after a partial failure and is what bin/reap.sh calls.
 
-source /home/osmc/akamai/lib/common.sh
-source /home/osmc/akamai/lib/cloudflare.sh
-source /home/osmc/akamai/lib/vm.sh
-source /home/osmc/akamai/lib/nginx.sh
+source "$(dirname "$0")/../lib/common.sh"
+source "$(dirname "$0")/../lib/cloudflare.sh"
+source "$(dirname "$0")/../lib/vm.sh"
+source "$(dirname "$0")/../lib/nginx.sh"
 
 LOG_TAG="deprovision"
 
@@ -44,7 +44,7 @@ else
 fi
 
 rm -rf "$(vm_dir "$NAME")"
-log "Removed $(vm_dir "$NAME")"
+log "Removed $(relpath_in_repo "$(vm_dir "$NAME")")"
 
 if (( failed )); then
   # Keep the registry entry so the reaper retries and the address stays

@@ -6,23 +6,21 @@ hypervisor that I self-host.
 I wrote it as an exercise to earn a spot job at Akamai on your HIVE Core Linux
 Platforms Team. I want you to see my skills and how I approach this kind of work,
 as well as how I document. The provisioning pipeline is observable, rolls itself
-back, fails closed, and runs with the least privilege it can — on real hardware,
+back, fails closed, and runs with the least privilege it can, on real hardware,
 with real DNS, behind a real WAF.
 
 
-I **did** use AI assist in the creation of much of the code of this project. The
+I **did** use AI assist to create the code of this project. The
 infrastructure, Cloudflare proxy (w/API access), Docker-based nginx+waf,
-and libvirt hypervisor all predate this demo (as does the initiative and hubris
-to think that you'd be impressed). My AI prompts just generate *code*. 
+and libvirt hypervisor all predate this demo ... and of course the initiative and
+hubris to think that you'd be impressed is 100% my own.
 
 ## Concept
 
-A visitor to the portal submits a hostname and a custom message. This spawns a
+A visitor uses the form served by `web/server.py` and submits a hostname and a custom message. This spawns a
 QEMU/libvirt-based [Flatcar Container Linux](https://www.flatcar.org/) VM
 to run nginx and serve the custom message at `https://akamai-<name>.wmarler.com/` in about
-a minute. There are simpler ways to display custom messages; the point is that
-I can start a VM from a web prompt. The custom inputs are to show that I'm not
-faking it.
+a minute. The VM is destroyed automatically via a reaping command on a systemd timer .
 
 
 ```
@@ -30,7 +28,7 @@ faking it.
   browser            │ hypervisor (Ubuntu 24.04, libvirt 10 / QEMU 8.2, br0)       │
     │                │                                                             │
     │ https          │  nginx + ModSecurity CRS (container, host network)          │
-    ▼                │    akamai.wmarler.com ──► 127.0.0.1:8095  web/server.py     │
+    ▼                │    akamai.wmarler.com ──► 127.0.0.1:WEB_LISTEN_PORT  web/server.py │
  Cloudflare ────────►│    *.wmarler.com (one server block per live guest)          │
   (proxied,          │                               │  sudo (two scripts only)    │
    wildcard TLS)     │                               ▼                             │
@@ -50,10 +48,10 @@ faking it.
 
 ## What happens when you press the button
 
-1. **Validate, twice.** The portal checks the name (`[a-z0-9]{1,32}`) and the
+1. **Validate, twice.** `web/server.py` checks the name (`[a-z0-9]{1,32}`) and the
    message (1–200 printable characters), applies per-client and global rate
    limits, and refuses reserved or already-live names. `provision.sh` then
-   re-validates everything from scratch — the web tier is not a trust
+   re-validates everything from scratch — `web/server.py` is not a trust
    boundary for the root-run scripts.
 2. **Allocate.** A static address and a deterministic, locally-administered
    MAC are taken from a small pool on the host bridge, under a `flock` so
@@ -107,7 +105,7 @@ entry.
   endpoint.
 * **A tiny stdlib-only Python service, not PHP.** nginx and php-fpm run in
   containers on this host, so neither can escalate to the hypervisor. The
-  portal is a host-side daemon under its own unprivileged account; its
+  `web/server.py` is a host-side daemon under its own unprivileged account; its
   only privilege is a sudoers rule naming two executables.
 * **Bash for the privileged path.** The operations are "run these six
   tools in order and undo them if something fails" — the natural home for
@@ -122,7 +120,7 @@ entry.
 
 | Path | What |
 |------|------|
-| `web/server.py` | The portal: form, JSON API, job queue, rate limits, per-job log streaming. Python 3 stdlib only. |
+| `web/server.py` | Form, JSON API, job queue, rate limits, per-job log streaming. Python 3 stdlib only. |
 | `web/templates/`, `web/static/` | HTML/CSS/JS. Works without JavaScript; with it, logs stream and the instance table updates. |
 | `bin/provision.sh` | Root entry point: name + message in, running guest out, rollback on failure. |
 | `bin/deprovision.sh` | Idempotent teardown of one guest (nginx, domain, DNS, files, registry). |
@@ -137,20 +135,24 @@ entry.
 | `nginx/instance.conf.template` | Per-guest server block written on the hypervisor. |
 | `configs/*.template` + `configs/generate_configs.sh` | nginx vhost, sudoers, systemd units — filled in from the secrets file into `configs/actual/`, then copied into place by hand. |
 | `configs/README.md` | **Exactly** what has to be added outside this directory, and why. |
-| `configs/secrets.example` | Every deployment-specific value (token location, zone, domain, pool, paths). The real one is `configs/actual/secrets`, git-ignored. |
+| `secrets.example` | Every deployment-specific value, including `AKAMAI_DIR`. The real `secrets` file is git-ignored. |
 
 Runtime state lives under `state/` (git-ignored): `instances/<name>.env`
 registry records, `vms/<name>/` (overlay disk, Ignition, domain XML, console
-log, staged Butane), `jobs/` (portal job records and logs).
+log, staged Butane), `jobs/` (`web/server.py` job records and logs).
 
 ## Running it
 
-I don't go into a bunch of detail here. The point of this repository isn't to help
-someone else do what I did -- it's to show you the code of what I did, in conjunction
-with the behavior you see.
+I don't go into a bunch of detail here. The point of this repository isn't to
+make something portable and reusable for someone else.
+
+The reason I used a "secrets" file and "generate_configs.sh" and other helper
+scripts in lib/*.sh was to reduce my own human error in copying and pasting
+file paths around. I also didn't want to commit the actual paths on my server
+to a public repo. 
 
 ```bash
-cp configs/secrets.example configs/actual/secrets      # token file, zone, domain, pool, paths
+cp secrets.example secrets                             # AKAMAI_DIR, token, zone, domain, pool, paths
 bin/fetch-image.sh                                     # ~600 MB, checksum-verified
 configs/generate_configs.sh                            # -> configs/actual/*
 # then follow configs/README.md (user, sudoers, two systemd units, one nginx file)
@@ -160,45 +162,38 @@ Some tools, monitoring, etc:
 
 ```bash
 bin/list.sh                                 # what is live
-journalctl -fu akamai-web.service           # portal log (one line per request/job)
+journalctl -fu akamai-web.service           # web/server.py log (one line per request/job)
 systemctl list-timers 'akamai-*'            # reaper schedule
-bin/provision.sh bob "Hello"                # same thing the button does, from a shell
+bin/provision.sh bob "Hello"                # What the button in the web UI does, but from the shell
 bin/deprovision.sh bob                      # Manually destroy a VM.
 virsh -c qemu:///system console akamai-bob  # or state/vms/bob/console.log
 ```
 
 The scripts honour `SKIP_DNS=1` / `SKIP_NGINX=1` for development (sudo
-strips them, so the portal cannot set them). Paths are hard-coded to
-`/home/osmc/akamai`; this runs on one host.
+strips them, so `web/server.py` cannot set them). The checkout path is
+`AKAMAI_DIR` in `secrets`.
 
 ## Security model, briefly
 
-* Portal: unprivileged system user, loopback only, behind nginx + ModSecurity
-  CRS at Cloudflare's edge. No cookies or sessions; CSRF is handled with
-  `Sec-Fetch-Site`/`Origin` checks, a strict CSP, and the destroy action
-  needing a per-job secret that only the creating browser ever receives.
+* `web/server.py`: unprivileged system user, loopback only (`WEB_LISTEN_PORT` in
+  `secrets`), behind nginx + ModSecurity CRS at Cloudflare's edge. No cookies or
+  sessions; CSRF is handled with `Sec-Fetch-Site`/`Origin` checks, a strict CSP,
+  and the destroy action needing a per-job secret that only the creating browser
+  ever receives.
 * Escalation: `/etc/sudoers.d/akamai-portal` allows exactly
   `bin/provision.sh` and `bin/deprovision.sh`, which must not be writable by
   the service account. The Cloudflare token stays in a root-only file; the
   service account never reads it.
 * Guests: 1 vCPU / 1 GiB, no SSH keys, auto-updates masked, nginx container
-  read-only with capabilities dropped, addresses confined to the pool,lifetime
+  read-only with capabilities dropped, addresses confined to the pool, lifetime
   bounded by the reaper.
 * Abuse limits: per-client hourly limit, global queue depth, pool-size
   capacity, reserved names, DNS-collision refusal.
-
-## Verified on this host
-
-Provision → guest serving the escaped message in 45s; teardown; a real
-Cloudflare round-trip (record created, resolvable at `1.1.1.1`, deleted);
-TTL expiry via the reaper; forced boot-timeout rollback destroying the
-domain and freeing the address; both nginx configs passing `nginx -t`;
-AppArmor enforcing on the transient domain with the `fw_cfg` file.
+* AppArmor enforcing on the transient domain with the `fw_cfg` file.
 
 ## What I would do next
 
 * Expose the instance registry and job outcomes as Prometheus metrics
-  (provision duration, failures by step, pool occupancy) — the host already
-  runs Prometheus *... but <cough> don't ask for a demo of it ...*.
+  (provision duration, failures by step, pool occupancy)
 * Swap the shell lock/registry for libvirt metadata as the single source of
   truth (the domain XML already carries it) so `list.sh` needs no files.

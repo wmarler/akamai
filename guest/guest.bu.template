@@ -52,7 +52,7 @@ storage:
       mode: 0644
       contents:
         inline: |
-          Ephemeral demo guest @@FQDN@@ (@@IP@@), provisioned by the akamai portal.
+          Ephemeral demo guest @@FQDN@@ (@@IP@@), provisioned via web/server.py.
           Serving /var/www via web.service; it will be reaped automatically.
 
 systemd:

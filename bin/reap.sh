@@ -10,7 +10,7 @@
 # It also reports (but does not touch) libvirt domains that look like ours
 # (akamai-*) yet have no registry entry, so an operator notices drift.
 
-source /home/osmc/akamai/lib/common.sh
+source "$(dirname "$0")/../lib/common.sh"
 
 LOG_TAG="reap"
 ALL=0

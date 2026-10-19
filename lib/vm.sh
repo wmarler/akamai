@@ -39,7 +39,7 @@ vm_build_ignition() {
     EXPIRES_AT "$EXPIRES_AT"
 
   # Optional SSH keys, one per line, rendered as a YAML list. Keys are
-  # operator-supplied (from configs/actual/secrets), not user input.
+  # operator-supplied (from secrets), not user input.
   local keys_yaml="" key
   while IFS= read -r key; do
     [[ -n "$key" ]] || continue
@@ -66,7 +66,7 @@ vm_build_ignition() {
   mv -f "${dir}/config.ign.tmp" "${dir}/config.ign"
   # Readable by the qemu process (libvirt-qemu), which reads it for fw_cfg.
   chmod 0644 "${dir}/config.ign"
-  log "Ignition config: ${dir}/config.ign ($(wc -c <"${dir}/config.ign") bytes)"
+  log "Ignition config: $(relpath_in_repo "${dir}/config.ign") ($(wc -c <"${dir}/config.ign") bytes)"
 }
 
 # vm_create_disk NAME -> copy-on-write overlay on the base image. Instances
@@ -76,7 +76,7 @@ vm_create_disk() {
   dir="$(vm_dir "$name")"
   [[ -r "$BASE_IMAGE" ]] || die "base image ${BASE_IMAGE} not found; run bin/fetch-image.sh"
   qemu-img create -q -f qcow2 -b "$BASE_IMAGE" -F qcow2 "${dir}/disk.qcow2"
-  log "Disk: ${dir}/disk.qcow2 (qcow2 overlay on $(basename "$BASE_IMAGE"))"
+  log "Disk: $(relpath_in_repo "${dir}/disk.qcow2") (qcow2 overlay on $(basename "$BASE_IMAGE"))"
 }
 
 # vm_start NAME -> renders the domain XML and starts a transient domain.

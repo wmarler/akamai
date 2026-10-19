@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Self-service portal: a form that provisions an ephemeral Flatcar guest.
+web/server.py: a form that provisions an ephemeral Flatcar guest.
 
 Design notes
 ------------
@@ -10,12 +10,12 @@ Design notes
   nginx itself. Each request becomes a *job* that runs ``sudo bin/provision.sh``
   (or ``deprovision.sh``); sudoers restricts that user to exactly those two
   executables. All privileged logic lives in the scripts, which re-validate
-  their arguments, so the web layer is not a trust boundary for them.
+  their arguments, so `web/server.py` is not a trust boundary for them.
 * Jobs run one at a time from a worker thread; the user watches the script's
   log stream in the browser. Job state is persisted as JSON + log files under
   ``state/jobs`` so a restart does not lose history.
-* It binds to loopback only. nginx terminates TLS, applies the WAF, and
-  forwards ``X-Real-IP`` which is used for per-client rate limiting.
+* It binds to loopback only on ``WEB_LISTEN_PORT`` from ``secrets``. nginx
+  terminates TLS, applies the WAF, and forwards ``X-Real-IP`` for rate limiting.
 """
 
 from __future__ import annotations
@@ -39,15 +39,30 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
-# Hard-coded: this runs on one host, from one checkout.
-REPO_DIR = Path("/home/osmc/akamai")
-SECRETS_FILE = REPO_DIR / "configs" / "actual" / "secrets"
-WEB_DIR = REPO_DIR / "web"
-STATE_DIR = REPO_DIR / "state"
+# Bootstrap: find secrets next to this file's checkout. AKAMAI_DIR itself
+# comes from secrets after load (see Settings.load / configure_paths).
+_CHECKOUT = Path(__file__).resolve().parent.parent
+SECRETS_FILE = _CHECKOUT / "secrets"
+
+# Defaults until Settings.load() reads AKAMAI_DIR from secrets.
+REPO_DIR = _CHECKOUT
+WEB_DIR = _CHECKOUT / "web"
+STATE_DIR = _CHECKOUT / "state"
 INSTANCE_DIR = STATE_DIR / "instances"
 JOBS_DIR = STATE_DIR / "jobs"
-PROVISION = REPO_DIR / "bin" / "provision.sh"
-DEPROVISION = REPO_DIR / "bin" / "deprovision.sh"
+PROVISION = _CHECKOUT / "bin" / "provision.sh"
+DEPROVISION = _CHECKOUT / "bin" / "deprovision.sh"
+
+
+def configure_paths(akamai_dir: Path) -> None:
+    global REPO_DIR, WEB_DIR, STATE_DIR, INSTANCE_DIR, JOBS_DIR, PROVISION, DEPROVISION
+    REPO_DIR = akamai_dir
+    WEB_DIR = akamai_dir / "web"
+    STATE_DIR = akamai_dir / "state"
+    INSTANCE_DIR = STATE_DIR / "instances"
+    JOBS_DIR = STATE_DIR / "jobs"
+    PROVISION = akamai_dir / "bin" / "provision.sh"
+    DEPROVISION = akamai_dir / "bin" / "deprovision.sh"
 
 NAME_RE = re.compile(r"^[a-z0-9]{1,32}$")
 MESSAGE_MAX = 200
@@ -90,7 +105,7 @@ def load_secrets(path: Path) -> dict[str, str]:
 @dataclass(frozen=True)
 class Settings:
     base_domain: str
-    portal_host: str
+    site_host: str  # PORTAL_HOST in secrets: nginx vhost that proxies here
     listen_port: int
     reserved: frozenset[str]
     ttl_hours: float
@@ -104,15 +119,15 @@ class Settings:
 
     @classmethod
     def load(cls) -> "Settings":
-        path = SECRETS_FILE
-        if not path.is_file():
-            sys.exit(f"missing {path}; copy configs/secrets.example and edit it")
-        c = load_secrets(path)
+        if not SECRETS_FILE.is_file():
+            sys.exit(f"missing {SECRETS_FILE}; copy secrets.example to secrets and edit it")
+        c = load_secrets(SECRETS_FILE)
         try:
+            configure_paths(Path(c["AKAMAI_DIR"]))
             return cls(
                 base_domain=c["BASE_DOMAIN"],
-                portal_host=c["PORTAL_HOST"],
-                listen_port=int(c.get("WEB_LISTEN_PORT", "8095")),
+                site_host=c["PORTAL_HOST"],
+                listen_port=int(c["WEB_LISTEN_PORT"]),
                 reserved=frozenset(c.get("RESERVED_NAMES", "").split()),
                 ttl_hours=float(c.get("INSTANCE_TTL_HOURS", "2")),
                 pool_size=int(c["POOL_END"]) - int(c["POOL_START"]) + 1,
@@ -243,7 +258,7 @@ class JobRunner:
                 job.finished_at = utcnow()
                 job.exit_code = -1
                 with job.log_path.open("a", encoding="utf-8") as fh:
-                    fh.write("\n[portal restarted while this job was active; marking failed]\n")
+                    fh.write("\n[web/server.py restarted while this job was active; marking failed]\n")
                 job.save()
             self.jobs[job.id] = job
 
@@ -338,7 +353,7 @@ class ApiError(Exception):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "akamai-portal/1.0"
+    server_version = "akamai-web/1.0"
     sys_version = ""
     settings: Settings
     runner: JobRunner
@@ -413,7 +428,7 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin:
             host = urllib.parse.urlsplit(origin).hostname or ""
-            if host not in (self.settings.portal_host, (self.headers.get("Host") or "").split(":")[0]):
+            if host not in (self.settings.site_host, (self.headers.get("Host") or "").split(":")[0]):
                 raise ApiError(HTTPStatus.FORBIDDEN, "cross-site request refused")
 
     # -- routing ---------------------------------------------------------- #
@@ -470,7 +485,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_html(HTTPStatus.OK, self.render(
             "index.html",
             base_domain=s.base_domain,
-            portal_host=s.portal_host,
+            site_host=s.site_host,
             instance_prefix=s.instance_prefix,
             ttl=f"{s.ttl_hours:g}",
             message_max=str(MESSAGE_MAX),
@@ -583,7 +598,7 @@ def main() -> None:
     httpd = ThreadingHTTPServer((bind, settings.listen_port), Handler)
     httpd.daemon_threads = True
     log.info("listening on http://%s:%d for %s (instances under *.%s, ttl %gh, capacity %d)",
-             bind, settings.listen_port, settings.portal_host, settings.base_domain,
+             bind, settings.listen_port, settings.site_host, settings.base_domain,
              settings.ttl_hours, settings.pool_size)
     try:
         httpd.serve_forever()

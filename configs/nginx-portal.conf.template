@@ -1,5 +1,5 @@
-# Reverse proxy for the provisioning portal, plus the include that picks up the
-# per-instance server blocks the provisioner writes.
+# Reverse proxy for web/server.py (PORTAL_HOST), plus the include that picks up
+# the per-instance server blocks provision.sh writes.
 #
 # Install as:  /etc/nginx/sites-available/@@PORTAL_HOST@@.conf
 # Enable with: ln -s ../sites-available/@@PORTAL_HOST@@.conf /etc/nginx/sites-enabled/
@@ -11,7 +11,7 @@
 # empty; a glob include with no matches is not an error.
 include @@NGINX_INSTANCE_DIR@@/*.conf;
 
-upstream akamai_portal {
+upstream akamai_web {
   server 127.0.0.1:@@WEB_LISTEN_PORT@@;
   keepalive 8;
 }
@@ -28,8 +28,8 @@ server {
   # I have many virtual hosts under my domain, so I have my SSL configs in an include
   include @@NGINX_SSL_SNIPPET@@;
 
-  access_log /var/log/nginx/akamai-portal-access.log main;
-  error_log  /var/log/nginx/akamai-portal-error.log;
+  access_log /var/log/nginx/akamai-web-access.log main;
+  error_log  /var/log/nginx/akamai-web-error.log;
 
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
   add_header X-Content-Type-Options nosniff always;
@@ -39,11 +39,11 @@ server {
   client_max_body_size 16k;
 
   location / {
-    proxy_pass http://akamai_portal;
+    proxy_pass http://akamai_web;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_set_header Host $host;
-    # The portal rate-limits on X-Real-IP; with the Cloudflare real_ip
+    # web/server.py rate-limits on X-Real-IP; with the Cloudflare real_ip
     # configuration in conf.d this is the true client address.
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -59,12 +59,12 @@ server {
 # short explanation instead of a bare 444/502.
 server {
   listen 80;
-  server_name ~^@@INSTANCE_PREFIX_REGEX@@[a-z0-9]{1,32}\.@@BASE_DOMAIN_REGEX@@$;
+  server_name ~^@@INSTANCE_PREFIX_REGEX@@[a-z0-9]+\.@@BASE_DOMAIN_REGEX@@$;
   return 301 https://$host$request_uri;
 }
 
 server {
-  server_name ~^@@INSTANCE_PREFIX_REGEX@@[a-z0-9]{1,32}\.@@BASE_DOMAIN_REGEX@@$;
+  server_name ~^@@INSTANCE_PREFIX_REGEX@@[a-z0-9]+\.@@BASE_DOMAIN_REGEX@@$;
 
   include @@NGINX_SSL_SNIPPET@@;
 

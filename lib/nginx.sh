@@ -3,10 +3,7 @@
 # Reverse-proxy wiring on the hypervisor's nginx.
 #
 # Each instance gets one file in NGINX_INSTANCE_DIR, rendered from
-# nginx/instance.conf.template, that terminates TLS with the zone's wildcard
-# certificate and proxies to the guest's address on the bridge. The portal's
-# own server block (configs/nginx-portal.conf.template) carries an
-# "include NGINX_INSTANCE_DIR/*.conf;" so nothing else in the nginx tree is
+# nginx/instance.conf.template. Nothing else in the nginx tree is
 # touched at runtime.
 #
 # Every change is validated with NGINX_TEST_CMD before NGINX_RELOAD_CMD. If

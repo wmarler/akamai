@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 #
-# Fill in configs/*.template from configs/actual/secrets and write the results
-# to configs/actual/. Those are the files to copy into place by hand (see
-# configs/README.md). This script writes nowhere else.
+# Fill in configs/*.template from secrets and write the results to
+# configs/actual/. Copy those into place by hand (see configs/README.md).
 
-source /home/osmc/akamai/lib/common.sh
-source /home/osmc/akamai/lib/vm.sh   # for render_template
+source "$(dirname "$0")/../lib/common.sh"
+source "$(dirname "$0")/../lib/vm.sh"
 
 LOG_TAG="generate-configs"
 load_config

@@ -5,7 +5,7 @@
 # Show live instances from the registry alongside what libvirt and nginx
 # actually have, so discrepancies are obvious at a glance.
 
-source /home/osmc/akamai/lib/common.sh
+source "$(dirname "$0")/../lib/common.sh"
 
 load_config
 

@@ -9,7 +9,7 @@
   expressed here as libvirt's native sysinfo type='fwcfg' element so libvirt
   can label the file for the hypervisor's security driver (AppArmor on Ubuntu).
 -->
-<domain type='kvm' xmlns:akamai='urn:akamai-portal:instance:1.0'>
+<domain type='kvm' xmlns:akamai='urn:akamai-web:instance:1.0'>
   <name>@@VM_NAME@@</name>
   <title>@@FQDN@@</title>
   <description>Ephemeral demo guest for @@FQDN@@, provisioned @@CREATED_AT@@, expires @@EXPIRES_AT@@</description>
